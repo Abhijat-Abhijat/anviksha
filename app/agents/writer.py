@@ -3,7 +3,7 @@ from app.agents.base import LLMAgent
 
 class WriterAgent(LLMAgent):
     name = "write"
-    title = "Paper"
+    title = "Write"
     description = "Writes everything up as a paper, citing only the papers found."
     outputs = ("final_paper",)
     tier = "writing"

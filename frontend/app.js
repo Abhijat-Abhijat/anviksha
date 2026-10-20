@@ -29,6 +29,40 @@ function el(tag, props = {}, ...children) {
   return node;
 }
 
+// ---------------------------------------------------------------- dot-matrix agent icons
+// 9x9 bitmaps drawn as dots. Each dot carries its distance from the centre (--d)
+// so CSS can ripple outward while the agent works. Unknown agents get the fallback.
+
+const GLYPHS = {
+  retrieve: [".#####...", "#.....#..", "#.....#..", "#.....#..", "#.....#..", ".#####...", "......##.", ".......##", "........#"],
+  summarize: ["#########", ".........", "#######..", ".........", "#####....", ".........", "###......", ".........", "#........"],
+  find_gaps: ["###.###.#", "###.###.#", "###.###.#", ".........", "###.....#", "###.....#", "###.....#", ".........", "###.###.#"],
+  propose: ["....#....", ".#..#..#.", "..#...#..", "...###...", "#.#####.#", "...###...", "..#...#..", ".#..#..#.", "....#...."],
+  critique: [".........", "..#####..", ".#.....#.", "#..###..#", "#..###..#", "#..###..#", ".#.....#.", "..#####..", "........."],
+  verify: ["#########", "#.......#", "#......##", "#.....#.#", "##...#..#", "#.#.#...#", "#..#....#", "#.......#", "#########"],
+  decide: ["....#....", "...#.#...", "..#...#..", ".#.....#.", "#...#...#", ".#.....#.", "..#...#..", "...#.#...", "....#...."],
+  design_experiment: ["...###...", "....#....", "....#....", "...#.#...", "..#...#..", ".#.....#.", "#.#####.#", "#########", ".#######."],
+  write: ["######...", "#....##..", "#.###.##.", "#......##", "#.#####.#", "#.......#", "#.#####.#", "#.......#", "#########"],
+  fallback: ["#########", "#.......#", "#.#####.#", "#.#...#.#", "#.#.#.#.#", "#.#...#.#", "#.#####.#", "#.......#", "#########"],
+};
+
+function glyphDots(name, cell = 1, offset = 0, r = 0.36) {
+  const rows = GLYPHS[name] || GLYPHS.fallback;
+  let out = "";
+  rows.forEach((row, y) => [...row].forEach((c, x) => {
+    if (c !== "#") return;
+    const d = Math.hypot(x - 4, y - 4).toFixed(1);
+    out += `<circle cx="${(x + 0.5) * cell + offset}" cy="${(y + 0.5) * cell + offset}" r="${r * cell}" style="--d:${d}"/>`;
+  }));
+  return out;
+}
+
+function glyph(name, className = "glyph") {
+  const tpl = document.createElement("template");
+  tpl.innerHTML = `<svg class="${className}" viewBox="0 0 9 9" aria-hidden="true">${glyphDots(name)}</svg>`;
+  return tpl.content.firstChild;
+}
+
 // ---------------------------------------------------------------- per-agent views
 // Optional custom renderers keyed by agent name. Agents without one get a generic view.
 
@@ -114,7 +148,7 @@ const VIEWS = {
   },
   write() {
     if (!state.final_paper) return null;
-    return el("p", {}, `${state.final_paper.split(/\s+/).length} words. `, el("a", { href: "#paper", textContent: "Read the paper" }));
+    return el("p", {}, `${state.final_paper.split(/\s+/).length} words. `, el("a", { href: "#/paper", textContent: "Read the paper" }));
   },
 };
 
@@ -123,31 +157,248 @@ function genericView(key) {
   return Object.keys(out).length ? el("pre", { className: "plan", textContent: JSON.stringify(out, null, 2) }) : null;
 }
 
+function skeleton() {
+  return el("div", { className: "skel", ariaHidden: "true" }, el("i"), el("i"), el("i"));
+}
+
 function liveView(key) {
   const now = el("p", { className: "live-now", textContent: live[key]?.say || "Starting…" });
-  const text = live[key]?.text ? el("pre", { className: "live-text", textContent: live[key].text }) : null;
+  // Placeholder bars until the first words stream in.
+  const text = live[key]?.text ? el("pre", { className: "live-text", textContent: live[key].text }) : skeleton();
   return el("div", { className: "live" }, now, text);
 }
 
-// ---------------------------------------------------------------- cells
+// ---------------------------------------------------------------- panels and view state
+// Every agent gets a panel in the grid; Paper and Activity panels are static in the HTML.
+// Panels can be collapsed (body hidden) or hidden (removed from the grid); the choice persists.
 
-function buildCells() {
-  $("cells").replaceChildren();
+const VIEW_STORE = "anviksha.view";
+const SPAN = { summarize: "2", propose: "2", design_experiment: "2" };  // wider panels for longer output
+let view = { hidden: [], collapsed: [] };
+try { view = { ...view, ...JSON.parse(localStorage.getItem(VIEW_STORE) || "{}") }; } catch { /* storage blocked */ }
+
+const ICON = {
+  collapse: '<svg viewBox="0 0 12 12" aria-hidden="true"><path d="M2 4l4 4 4-4"/></svg>',
+  hide: '<svg viewBox="0 0 12 12" aria-hidden="true"><path d="M2.5 2.5l7 7M9.5 2.5l-7 7"/></svg>',
+};
+
+const panels = () => [...$("grid").querySelectorAll(".panel")];
+const panelTitle = (p) => p.querySelector("h3").textContent;
+
+function saveView() {
+  try { localStorage.setItem(VIEW_STORE, JSON.stringify(view)); } catch { /* storage blocked */ }
+}
+
+function toggleIn(list, id, on = !view[list].includes(id)) {
+  view[list] = view[list].filter((x) => x !== id);
+  if (on) view[list].push(id);
+  saveView();
+  applyView();
+}
+
+function addControls(panel) {
+  const id = panel.dataset.panel;
+  const title = panelTitle(panel);
+  const collapse = el("button", { type: "button", className: "icon-btn collapse", innerHTML: ICON.collapse,
+    ariaLabel: `Collapse ${title}` });
+  collapse.addEventListener("click", () => toggleIn("collapsed", id));
+  const hide = el("button", { type: "button", className: "icon-btn", innerHTML: ICON.hide, ariaLabel: `Hide ${title}` });
+  hide.addEventListener("click", () => toggleIn("hidden", id, true));
+  panel.querySelector(".panel-ctl").replaceChildren(collapse, hide);
+}
+
+function buildPanels() {
+  $("grid").querySelectorAll("[data-agent]").forEach((p) => p.remove());
   $("strip").replaceChildren();
+  const anchor = $("panel-activity");
   AGENTS.forEach((agent, i) => {
-    const rerun = el("button", { type: "button", className: "rerun", textContent: "Rerun from here",
-      title: `Run ${agent.title} again, then every agent after it` });
-    rerun.addEventListener("click", () => run(agent.name));
-    $("cells").append(el("li", { className: "cell", id: `cell-${agent.name}` },
-      el("div", { className: "cell-head" },
-        el("span", { className: "idx", textContent: String(i + 1).padStart(2, "0") }),
+    const panel = el("article", { className: "panel reveal", id: `cell-${agent.name}` },
+      el("header", { className: "panel-head" },
+        el("span", { className: "idx" }, glyph(agent.name), String(i + 1).padStart(2, "0")),
         el("h3", { textContent: agent.title }),
-        el("span", { className: "role", textContent: agent.description }),
-        el("span", { className: "cell-status" }),
-        rerun),
-      el("div", { className: "cell-body" })));
+        el("div", { className: "panel-ctl" }),
+        el("p", { className: "role", textContent: agent.description }),
+        el("span", { className: "cell-status" })),
+      el("div", { className: "panel-body" }));
+    panel.dataset.panel = agent.name;
+    panel.dataset.agent = "";
+    panel.dataset.span = SPAN[agent.name] || "1";
+    panel.style.setProperty("--delay", `${(i % 3) * 70}ms`);
+    $("grid").insertBefore(panel, anchor);
     $("strip").append(el("li", { title: agent.title }));
     phase[agent.name] = "idle";
+  });
+  panels().forEach((p) => { addControls(p); p.classList.add("reveal"); });
+
+  $("chips").replaceChildren(...panels().map((p) => {
+    const chip = el("button", { type: "button", className: "chip", textContent: panelTitle(p) });
+    chip.dataset.panel = p.dataset.panel;
+    chip.addEventListener("click", () => toggleIn("hidden", p.dataset.panel));
+    return chip;
+  }));
+  applyView();
+  buildAgentList();
+  buildGraph();
+  observeReveal();
+}
+
+// Sidebar: one row per agent with status and a rerun button.
+function buildAgentList() {
+  $("agent-list").replaceChildren(...AGENTS.map((agent) => {
+    const jump = el("button", { type: "button", className: "agent-jump", textContent: agent.title,
+      title: `Show the ${agent.title} panel` });
+    jump.addEventListener("click", () => focusPanel(agent.name));
+    const rerun = el("button", { type: "button", className: "rerun", textContent: "Rerun",
+      ariaLabel: `Rerun ${agent.title} and every step after it` });
+    rerun.addEventListener("click", () => run(agent.name));
+    const li = el("li", {}, glyph(agent.name), jump, rerun, el("span", { className: "agent-meta" }));
+    li.dataset.agent = agent.name;
+    return li;
+  }));
+}
+
+function focusPanel(name) {
+  view.hidden = view.hidden.filter((x) => x !== name);
+  view.collapsed = view.collapsed.filter((x) => x !== name);
+  saveView();
+  applyView();
+  if (screen() !== "flow") location.hash = "#/flow";
+  requestAnimationFrame(() => $(`cell-${name}`)?.scrollIntoView({ block: "center" }));
+}
+
+function applyView() {
+  for (const p of panels()) {
+    const id = p.dataset.panel;
+    const collapsed = view.collapsed.includes(id);
+    p.hidden = view.hidden.includes(id);
+    p.toggleAttribute("data-collapsed", collapsed);
+    const btn = p.querySelector(".icon-btn.collapse");
+    btn.ariaLabel = `${collapsed ? "Expand" : "Collapse"} ${panelTitle(p)}`;
+    btn.setAttribute("aria-expanded", String(!collapsed));
+  }
+  for (const chip of $("chips").children) {
+    const shown = !view.hidden.includes(chip.dataset.panel);
+    chip.setAttribute("aria-pressed", String(shown));
+    chip.title = shown ? "Click to hide this panel" : "Click to show this panel";
+  }
+}
+
+$("expand-all").addEventListener("click", () => { view.collapsed = []; saveView(); applyView(); });
+$("collapse-all").addEventListener("click", () => { view.collapsed = panels().map((p) => p.dataset.panel); saveView(); applyView(); });
+$("show-all").addEventListener("click", () => { view.hidden = []; saveView(); applyView(); });
+
+// ---------------------------------------------------------------- agent map (Flow screen)
+// Agents as dot-glyph nodes. A bright packet travels each hand-off; a working agent
+// ripples with orbiting dots; a rejected hypothesis draws an amber loop back.
+
+const SVGNS = "http://www.w3.org/2000/svg";
+const graph = { pos: {}, narrow: null, svg: null };
+const reduceMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+function svgEl(tag, attrs = {}) {
+  const node = document.createElementNS(SVGNS, tag);
+  for (const [k, v] of Object.entries(attrs)) node.setAttribute(k, v);
+  return node;
+}
+
+function linkPath(a, b) {
+  const [ax, ay] = graph.pos[a];
+  const [bx, by] = graph.pos[b];
+  if (graph.narrow && ay !== by) return `M${ax} ${ay} C${ax} ${(ay + by) / 2} ${bx} ${(ay + by) / 2} ${bx} ${by}`;
+  return `M${ax} ${ay} C${(ax + bx) / 2} ${ay} ${(ax + bx) / 2} ${by} ${bx} ${by}`;
+}
+
+function loopPath(a, b) {  // from a back to an earlier agent b, arcing above
+  const [ax, ay] = graph.pos[a];
+  const [bx, by] = graph.pos[b];
+  const lift = graph.narrow ? 70 : 95;
+  return `M${ax} ${ay - 26} C${ax} ${ay - lift} ${bx} ${by - lift} ${bx} ${by - 26}`;
+}
+
+function buildGraph() {
+  const fig = $("constellation");
+  const width = fig.clientWidth;
+  if (!width || !ORDER.length) return;  // hidden screen: rebuilt when shown
+  graph.narrow = width < 640;
+  const n = ORDER.length;
+  let w;
+  let h;
+  if (graph.narrow) {  // 3-column snake
+    w = 360;
+    h = Math.ceil(n / 3) * 140 + 30;
+    ORDER.forEach((k, i) => {
+      const row = Math.floor(i / 3);
+      const col = row % 2 ? 2 - (i % 3) : i % 3;
+      graph.pos[k] = [60 + col * 120, 80 + row * 140];
+    });
+  } else {
+    w = 1000;
+    h = 250;
+    ORDER.forEach((k, i) => (graph.pos[k] = [60 + (i * 880) / (n - 1), 125 + Math.sin(i * 1.1) * 24]));
+  }
+
+  const svg = svgEl("svg", { viewBox: `0 0 ${w} ${h}`, role: "img", "aria-label": "Agent pipeline. Select an agent to see its panel." });
+  const edges = svgEl("g");
+  ORDER.slice(1).forEach((k, i) => edges.append(svgEl("path", { class: "edge", d: linkPath(ORDER[i], k), "data-from": ORDER[i] })));
+  const loops = svgEl("g", { id: "graph-loops" });
+  const packets = svgEl("g", { id: "graph-packets" });
+  const nodes = svgEl("g");
+  AGENTS.forEach((agent) => {
+    const [x, y] = graph.pos[agent.name];
+    const node = svgEl("g", { class: "node", transform: `translate(${x} ${y})`, tabindex: "0", role: "button",
+      "aria-label": `${agent.title}: show panel` });
+    node.dataset.node = agent.name;
+    const orbit = svgEl("g", { class: "orbit" });
+    for (let i = 0; i < 10; i++) {
+      const a = (i / 10) * Math.PI * 2;
+      orbit.append(svgEl("circle", { cx: (Math.cos(a) * 34).toFixed(1), cy: (Math.sin(a) * 34).toFixed(1), r: i % 3 ? 1 : 1.8 }));
+    }
+    const art = svgEl("g", { class: "art" });
+    art.innerHTML = glyphDots(agent.name, 4.4, -19.8, 0.36);
+    const title = svgEl("text", { class: "t", y: 52 });
+    title.textContent = agent.title;
+    const sub = svgEl("text", { class: "sub", y: 67 });
+    node.append(svgEl("circle", { class: "mask", r: 28 }), orbit, art, title, sub);
+    node.addEventListener("click", () => focusPanel(agent.name));
+    node.addEventListener("keydown", (e) => (e.key === "Enter" || e.key === " ") && (e.preventDefault(), focusPanel(agent.name)));
+    nodes.append(node);
+  });
+  svg.append(edges, loops, packets, nodes);
+  fig.replaceChildren(svg);
+  graph.svg = svg;
+  renderGraph();
+}
+
+function renderGraph() {
+  if (!graph.svg) return;
+  for (const node of graph.svg.querySelectorAll(".node")) {
+    const k = node.dataset.node;
+    node.dataset.state = phase[k];
+    const t = took[k] != null ? ` ${took[k].toFixed(1)}s` : "";
+    node.querySelector(".sub").textContent = { idle: "waiting", active: "working", done: `done${t}`, retry: `sent back${t}` }[phase[k]];
+  }
+  for (const edge of graph.svg.querySelectorAll(".edge")) {
+    edge.classList.toggle("lit", phase[edge.dataset.from] === "done");
+  }
+}
+
+// A comet of three dots travelling from one agent to the next.
+function sendPacket(from, to, back = false) {
+  if (!graph.svg || reduceMotion || !graph.pos[from] || !graph.pos[to]) return;
+  const d = back ? loopPath(from, to) : linkPath(from, to);
+  if (back && !graph.svg.querySelector(`#graph-loops [data-key="${from}-${to}"]`)) {
+    const loop = svgEl("path", { class: "loop", d });
+    loop.dataset.key = `${from}-${to}`;
+    $("graph-loops").append(loop);
+  }
+  [3.4, 2.4, 1.6].forEach((r, i) => {
+    const dot = svgEl("circle", { class: back ? "packet back" : "packet", r, opacity: 1 - i * 0.3 });
+    const motion = svgEl("animateMotion", { dur: back ? "1.1s" : "0.7s", begin: "indefinite", fill: "freeze", path: d,
+      calcMode: "spline", keyTimes: "0;1", keySplines: "0.4 0 0.2 1" });
+    dot.append(motion);
+    $("graph-packets").append(dot);
+    setTimeout(() => motion.beginElement(), i * 45);
+    setTimeout(() => dot.remove(), back ? 1300 : 900);
   });
 }
 
@@ -175,10 +426,41 @@ function renderCell(key) {
   const cell = $(`cell-${key}`);
   cell.dataset.state = phase[key];
   cell.querySelector(".cell-status").textContent = statusText(key);
-  cell.querySelector(".rerun").disabled = !canRerun(i);
   const body = phase[key] === "active" ? liveView(key) : (VIEWS[key] || genericView)(key);
-  cell.querySelector(".cell-body").replaceChildren(...(body ? [body] : []));
+  cell.querySelector(".panel-body").replaceChildren(...(body ? [body] : []));
   $("strip").children[i].dataset.state = phase[key];
+  const chip = $("chips").querySelector(`[data-panel="${key}"]`);
+  if (chip) chip.dataset.state = phase[key];
+  const row = $("agent-list").querySelector(`[data-agent="${key}"]`);
+  if (row) {
+    row.dataset.state = phase[key];
+    row.querySelector(".agent-meta").textContent = statusText(key);
+    row.querySelector(".rerun").disabled = !canRerun(i);
+  }
+}
+
+function renderPaperScreen() {
+  const paper = state.final_paper || live.write?.text || "";
+  $("paper-blank").hidden = !!paper;
+  $("paper-layout").hidden = !paper;
+  if (state.final_paper) $("paper-text").textContent = state.final_paper;
+  $("paper-text").classList.toggle("live", !state.final_paper && !!paper);
+  ["copy-btn", "txt-btn", "print-btn"].forEach((id) => ($(id).disabled = !state.final_paper || !!controller));
+
+  const summary = $("paper-summary");
+  summary.replaceChildren();
+  if (state.hypothesis) {
+    summary.append(
+      el("p", { className: "side-label", textContent: "Hypothesis" }),
+      el("p", { className: "meta-hyp", textContent: state.hypothesis }),
+      el("div", { className: "meta-line" }, "Confidence", el("b", { textContent: fmt(state.confidence) })),
+      el("div", { className: "meta-line" }, "Verdict",
+        el("b", { textContent: state.confidence == null ? "–" : state.approved ? "Approved" : "Below threshold" })),
+      el("div", { className: "meta-line" }, "Attempts", el("b", { textContent: state.attempts || "–" })));
+  }
+  $("paper-refs").replaceChildren(...(state.papers || []).map((p) => el("li", {},
+    /^https:\/\//.test(p.url || "") ? el("a", { href: p.url, target: "_blank", rel: "noopener", textContent: p.title }) : p.title,
+    ` (${p.published?.slice(0, 4) || "n.d."})`)));
 }
 
 function render() {
@@ -189,9 +471,13 @@ function render() {
   $("r-confidence").textContent = fmt(state.confidence);
   $("r-confidence").dataset.tone = state.confidence != null && !state.approved ? "warn" : "";
 
-  if (state.final_paper) $("paper-text").textContent = state.final_paper;
-  else if (!live.write?.text) $("paper-text").replaceChildren(el("p", { className: "empty", textContent: "The paper appears here, written live, once the earlier agents finish." }));
-  ["copy-btn", "txt-btn", "print-btn"].forEach((id) => ($(id).disabled = !state.final_paper || !!controller));
+  renderPaperScreen();
+  renderGraph();
+  $("flow-blank").hidden = !!state.topic;
+  $("side-topic").textContent = state.topic || "No inquiry yet";
+  const choice = runChoice || $("model").value;
+  $("side-model").textContent = choice === "auto" ? "Model: Auto, best per step" : `Model: ${choice}`;
+  $("stop-btn").hidden = !controller;
 
   const active = ORDER.find((k) => phase[k] === "active");
   $("hero-tag").textContent = active ? `Working: ${nameOf(active)}` : state.final_paper ? "Run complete" : "Agents standing by";
@@ -224,7 +510,10 @@ function onToken({ node, text }) {
     pre.textContent = entry.text;
     pre.scrollTop = pre.scrollHeight;
   }
-  if (byName[node]?.outputs.includes("final_paper")) $("paper-text").textContent = entry.text;
+  if (byName[node]?.outputs.includes("final_paper")) {
+    $("paper-text").textContent = entry.text;
+    if ($("paper-layout").hidden) renderPaperScreen();
+  }
 }
 
 function onUpdate(node, update) {
@@ -256,6 +545,7 @@ function onUpdate(node, update) {
     phase[node] = "done";
   }
   if (next) phase[next] = "active";
+  if (next) sendPacket(node, next, ORDER.indexOf(next) < ORDER.indexOf(node));
   render();
 }
 
@@ -329,7 +619,9 @@ async function run(start, topic = state.topic) {
   controller = new AbortController();
   lastTick = performance.now();
   setRunning(true);
-  if (from > 0) $(`cell-${start}`).scrollIntoView({ block: "center" });
+  if (from > 0) focusPanel(start);
+  else location.hash = "#/flow";
+  graph.svg?.querySelectorAll("#graph-loops path").forEach((p) => p.remove());
 
   try {
     const headers = { "Content-Type": "application/json" };
@@ -364,6 +656,7 @@ async function run(start, topic = state.topic) {
       }
     }
     if (!finished) throw new Error("The connection dropped before the run finished. Rerun from the agent that was working.");
+    if (state.final_paper) setTimeout(() => (location.hash = "#/paper"), 900);  // let the last packet land
   } catch (err) {
     showAlert(err.name === "AbortError" ? "Stopped. Finished steps are kept; rerun from any agent to continue." : err.message);
     ORDER.forEach((k) => { if (phase[k] === "active") phase[k] = "idle"; });
@@ -383,6 +676,50 @@ $("run-form").addEventListener("submit", (e) => {
   if (topic.length < 3) return showAlert("Enter a research question of at least 3 characters.");
   try { localStorage.setItem(KEY_STORE, $("access-key").value.trim()); } catch { /* storage blocked */ }
   run(ORDER[0], topic);
+});
+
+$("stop-btn").addEventListener("click", () => controller?.abort());
+
+$("side-toggle").addEventListener("click", () => {
+  const open = $("side-toggle").getAttribute("aria-expanded") !== "true";
+  $("side-toggle").setAttribute("aria-expanded", String(open));
+});
+
+// ---------------------------------------------------------------- screens
+// Hash routes: #/ (ask), #/flow, #/paper. Other hashes (skip link) are left alone.
+
+const SCREENS = ["ask", "flow", "paper"];
+const screen = () => document.body.dataset.screen;
+
+function route() {
+  const hash = location.hash;
+  if (hash && !hash.startsWith("#/")) return;
+  const name = SCREENS.includes(hash.slice(2)) ? hash.slice(2) : "ask";
+  const changed = screen() !== name;
+  document.body.dataset.screen = name;
+  document.querySelectorAll("[data-screen]:not(body)").forEach((s) => (s.hidden = s.dataset.screen !== name));
+  $("app").hidden = name === "ask";
+  document.querySelectorAll(".steps a").forEach((a) => {
+    if (a.dataset.route === name) a.setAttribute("aria-current", "page");
+    else a.removeAttribute("aria-current");
+  });
+  if (name === "ask") field.relayout();
+  if (name === "flow") buildGraph();
+  if (changed) {
+    scrollTo(0, 0);
+    const heading = document.querySelector(`#screen-${name} h1, #screen-${name} h2`);
+    heading?.focus({ preventScroll: true });
+  }
+  observeReveal();
+}
+addEventListener("hashchange", route);
+
+let resizeGraph;
+addEventListener("resize", () => {
+  clearTimeout(resizeGraph);
+  resizeGraph = setTimeout(() => {
+    if (screen() === "flow" && graph.narrow !== $("constellation").clientWidth < 640) buildGraph();
+  }, 150);
 });
 
 document.querySelectorAll(".example").forEach((b) => b.addEventListener("click", () => {
@@ -429,9 +766,13 @@ async function checkHealth() {
     $("access-key").hidden = !h.key_required;
     if (!h.groq_configured) setStatus("warn", "GROQ_API_KEY missing");
     else setStatus("ok", "Groq online");
-    if (!ORDER.length) await Promise.all([loadModels(), loadAgents()]);
+    if (!ORDER.length) {
+      await Promise.all([loadModels(), loadAgents()]);
+      finishBoot();
+    }
   } catch {
     setStatus("down", "Offline");
+    if (!ORDER.length) finishBoot("Server unreachable. Retrying every 30 seconds.");
   }
 }
 
@@ -459,15 +800,64 @@ async function loadAgents() {
   AGENTS = data.agents;
   ORDER = AGENTS.map((a) => a.name);
   AGENTS.forEach((a) => (byName[a.name] = a));
-  buildCells();
+  buildPanels();
   render();
 }
+
+// ---------------------------------------------------------------- boot loader, scroll reveal, scroll progress
+
+document.documentElement.classList.add("js");
+
+function lemniscate(n, cx, cy, a) {
+  return Array.from({ length: n }, (_, i) => {
+    const u = (i / n) * Math.PI * 2;
+    const d = 1 + Math.sin(u) ** 2;
+    return [cx + (a * Math.cos(u)) / d, cy + (a * Math.sin(u) * Math.cos(u)) / d, Math.abs(Math.cos(u))];
+  });
+}
+
+// Dots light up one after another around the loop, like the agents taking turns.
+const BOOT_DOTS = 22;
+$("boot-mark").innerHTML = lemniscate(BOOT_DOTS, 16, 16, 13.5).map(([x, y, w], i) =>
+  `<circle cx="${x.toFixed(2)}" cy="${y.toFixed(2)}" r="${(0.75 + 0.7 * w).toFixed(2)}" style="animation-delay:${((i / BOOT_DOTS) * 1.4).toFixed(2)}s"/>`).join("");
+const bootStarted = performance.now();
+
+function finishBoot(message) {
+  if (message) $("boot-text").textContent = message;
+  // Hold briefly so the loader never flashes, longer when there is a message to read.
+  const wait = Math.max(0, (message ? 1600 : 700) - (performance.now() - bootStarted));
+  setTimeout(() => $("boot").classList.add("done"), wait);
+}
+
+const revealer = "IntersectionObserver" in window
+  ? new IntersectionObserver((entries) => entries.forEach((e) => {
+      if (e.isIntersecting) { e.target.classList.add("in"); revealer.unobserve(e.target); }
+    }), { rootMargin: "0px 0px -8% 0px" })
+  : null;
+
+function observeReveal() {
+  document.querySelectorAll(".reveal:not(.in)").forEach((node) => {
+    if (revealer) revealer.observe(node);
+    else node.classList.add("in");
+  });
+}
+
+let scrollQueued = false;
+window.addEventListener("scroll", () => {
+  if (scrollQueued) return;
+  scrollQueued = true;
+  requestAnimationFrame(() => {
+    const max = document.documentElement.scrollHeight - innerHeight;
+    $("scroll-line").style.transform = `scaleX(${max > 0 ? scrollY / max : 0})`;
+    scrollQueued = false;
+  });
+}, { passive: true });
 
 // ---------------------------------------------------------------- dot-matrix field
 // A figure-eight of dots: the research loop. A bright pulse travels along it,
 // faster while agents are working.
 
-(function field() {
+const field = (function field() {
   const canvas = $("field");
   const ctx = canvas.getContext("2d");
   const still = matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -481,6 +871,7 @@ async function loadAgents() {
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
     w = canvas.clientWidth;
     h = canvas.clientHeight;
+    if (!w || !h) return;  // ask screen hidden; relayout when it is shown
     canvas.width = w * dpr;
     canvas.height = h * dpr;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -491,12 +882,7 @@ async function loadAgents() {
     const a = narrow ? w * 0.4 : Math.min(w * 0.3, h * 0.62);
     const band = a * 0.13;
     const step = narrow ? 7 : 9;
-    const curve = [];
-    for (let i = 0; i < 480; i++) {
-      const u = (i / 480) * Math.PI * 2;
-      const d = 1 + Math.sin(u) ** 2;
-      curve.push([cx + (a * Math.cos(u)) / d, cy + (a * Math.sin(u) * Math.cos(u)) / d, i / 480]);
-    }
+    const curve = lemniscate(480, cx, cy, a).map(([x, y], i) => [x, y, i / 480]);
     dots = [];
     for (let y = step / 2; y < h; y += step) {
       if (Math.abs(y - cy) > a * 0.4 + band) continue;
@@ -532,19 +918,21 @@ async function loadAgents() {
     const dt = last ? (ms - last) / 1000 : 0;
     last = ms;
     t = (t + dt * (controller ? 0.3 : 0.06)) % 1;
-    draw();
+    if (screen() === "ask") draw();  // no work while another screen is showing
     requestAnimationFrame(frame);
   }
 
-  layout();
   let resizeTimer;
   window.addEventListener("resize", () => {
     clearTimeout(resizeTimer);
     resizeTimer = setTimeout(layout, 150);
   });
   if (!still) requestAnimationFrame(frame);
+  return { relayout: layout };
 })();
 
 try { $("access-key").value = localStorage.getItem(KEY_STORE) || ""; } catch { /* storage blocked */ }
+document.querySelectorAll(".blank[data-glyph]").forEach((b) => b.prepend(glyph(b.dataset.glyph, "glyph big")));
+route();
 checkHealth();
 setInterval(checkHealth, 30000);

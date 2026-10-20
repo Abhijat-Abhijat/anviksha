@@ -28,11 +28,11 @@ retrieve → summarize → find_gaps → propose → critique → verify → dec
 | Verify | Estimates the risk of unsupported or fabricated claims |
 | Gate | Combines both scores (60/40). Approves, or sends the idea back (max 3 attempts) |
 | Experiment | Designs dataset, metrics, baselines, procedure and compute |
-| Paper | Writes the paper, citing only the retrieved sources |
+| Write | Writes the paper, citing only the retrieved sources |
 
 The model menu offers **Auto** (each step uses the model suited to its task: a fast model for summarizing and checking, a large one for reasoning and writing) or any single Groq model for every step. The list comes live from Groq, so retired models disappear by themselves.
 
-In the UI you can edit the gaps or the hypothesis and press **Rerun from here** on any agent: that agent and everything after it run again, using your edits.
+The UI has three screens: **Ask** (enter a question and pick a model), **Flow** (a live map of the agents plus a panel per agent that you can collapse or hide) and **Paper** (the draft with its references). A sidebar on Flow and Paper lists every agent with a **Rerun** button: that agent and everything after it run again, using any edits you made to the gaps or the hypothesis.
 
 ## Run locally
 

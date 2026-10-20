@@ -5,31 +5,44 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>ANVIKSHA</title>
   <meta name="description" content="Autonomous multi-agent research intelligence: discovers gaps, formulates hypotheses, verifies evidence and synthesizes papers." />
+  <meta property="og:title" content="ANVIKSHA" />
+  <meta property="og:description" content="Autonomous multi-agent research intelligence. From research question to paper, with every step inspectable and rerunnable." />
+  <meta name="theme-color" content="#0a0a0a" />
+  <link rel="icon" href="favicon.svg" type="image/svg+xml" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Geist+Mono:wght@300;400;500&family=Newsreader:opsz,wght@6..72,400;6..72,600&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Geist+Mono:wght@300;400;500;600&family=Newsreader:opsz,wght@6..72,400;6..72,600&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="styles.css" />
 </head>
-<body>
+<body data-screen="ask">
+  <a class="skip" href="#content">Skip to content</a>
+
+  <div class="boot" id="boot" role="status" aria-live="polite">
+    <svg class="boot-mark" id="boot-mark" viewBox="0 0 32 32" aria-hidden="true"></svg>
+    <p id="boot-text">Waking the agents</p>
+  </div>
+
   <div class="frame">
     <header class="nav">
-      <a class="logo" href="#top">ANVIKSHA</a>
-      <nav class="links" aria-label="Sections">
-        <a href="#pipeline">Pipeline</a>
-        <a href="#paper">Paper</a>
-        <a href="#log">Activity</a>
+      <a class="logo" href="#/"><img src="logo.svg" alt="" width="26" height="26" />ANVIKSHA</a>
+      <nav class="steps" aria-label="Screens">
+        <a href="#/" data-route="ask"><span>1</span>Ask</a>
+        <a href="#/flow" data-route="flow"><span>2</span>Flow</a>
+        <a href="#/paper" data-route="paper"><span>3</span>Paper</a>
       </nav>
       <p class="nav-now" id="nav-now" aria-hidden="true"></p>
       <ol class="strip" id="strip" aria-hidden="true"></ol>
       <p class="status" id="status" data-state="pending"><span class="dot"></span><span id="status-text">Connecting</span></p>
+      <span class="scroll-line" id="scroll-line" aria-hidden="true"></span>
     </header>
 
-    <section class="hero" id="top">
+    <!-- Screen 1: ask -->
+    <section class="hero" data-screen="ask" id="screen-ask" aria-labelledby="ask-title">
       <canvas id="field" aria-hidden="true"></canvas>
       <div class="hero-card">
         <p class="tag" id="hero-tag">Agents standing by</p>
         <p class="now" id="now" aria-live="polite"></p>
-        <h1>Autonomous research,<br />question to paper</h1>
+        <h1 id="ask-title" tabindex="-1">Autonomous research, question to paper</h1>
         <p class="lede">Anviksha retrieves literature, finds research gaps, formulates and stress-tests a hypothesis, designs the experiment and writes it up. Every step is inspectable, editable and can be rerun.</p>
         <form id="run-form" autocomplete="off">
           <label class="sr-only" for="topic">Research question</label>
@@ -55,49 +68,99 @@
       </div>
     </section>
 
-    <section class="section" id="pipeline" aria-labelledby="pipeline-title">
-      <div class="section-head">
-        <div>
-          <h2 id="pipeline-title">Pipeline</h2>
-          <p>Each agent writes into its own cell. Edit the gaps or the hypothesis, then rerun any agent: it and every step after it run again.</p>
+    <!-- Screens 2 and 3 share the sidebar -->
+    <div class="app" id="app" hidden>
+      <aside class="sidebar" id="sidebar" aria-label="Run control">
+        <button type="button" class="side-toggle" id="side-toggle" aria-expanded="false" aria-controls="side-body">Agents and run</button>
+        <div class="side-body" id="side-body">
+          <div class="side-block">
+            <p class="side-label">Inquiry</p>
+            <p class="side-topic" id="side-topic">No inquiry yet</p>
+            <p class="side-model" id="side-model"></p>
+            <div class="side-actions">
+              <a class="side-link" href="#/">New inquiry</a>
+              <button type="button" id="stop-btn" class="stop-btn" hidden>Stop run</button>
+            </div>
+          </div>
+          <dl class="readout">
+            <div><dt>Elapsed</dt><dd id="r-elapsed">0:00</dd></div>
+            <div><dt>Attempt</dt><dd id="r-attempt">–</dd></div>
+            <div><dt>Confidence</dt><dd id="r-confidence">–</dd></div>
+            <div><dt>Sources</dt><dd id="r-sources">–</dd></div>
+          </dl>
+          <div class="side-block">
+            <p class="side-label">Agents</p>
+            <ol class="agents" id="agent-list"></ol>
+            <p class="side-note">Rerun runs that agent and every step after it. Your edits to the gaps or the hypothesis are used.</p>
+          </div>
         </div>
-        <dl class="readout">
-          <div><dt>Elapsed</dt><dd id="r-elapsed">0:00</dd></div>
-          <div><dt>Attempt</dt><dd id="r-attempt">–</dd></div>
-          <div><dt>Confidence</dt><dd id="r-confidence">–</dd></div>
-          <div><dt>Sources</dt><dd id="r-sources">–</dd></div>
-        </dl>
-      </div>
-      <ol class="cells" id="cells"></ol>
-    </section>
+      </aside>
 
-    <section class="section" id="paper" aria-labelledby="paper-title">
-      <div class="section-head">
-        <div>
-          <h2 id="paper-title">Paper</h2>
-          <p>Draft written by the writer agent. Check every claim against the cited sources before you use it.</p>
-        </div>
-        <div class="toolbar">
-          <button type="button" id="copy-btn" disabled>Copy text</button>
-          <button type="button" id="txt-btn" disabled>Download .txt</button>
-          <button type="button" id="print-btn" disabled>Save as PDF</button>
-        </div>
-      </div>
-      <article class="paper" id="paper-text"><p class="empty">The paper appears here when the writer agent finishes.</p></article>
-    </section>
+      <main class="content" id="content" tabindex="-1">
+        <!-- Screen 2: flow -->
+        <section data-screen="flow" id="screen-flow" aria-labelledby="flow-title" hidden>
+          <div class="screen-head reveal">
+            <h2 id="flow-title" tabindex="-1">Flow</h2>
+            <p>Watch each agent work. Collapse or hide panels to focus. Edit the gaps or the hypothesis, then rerun from the sidebar.</p>
+          </div>
+          <p class="blank" id="flow-blank" data-glyph="propose"><span>No inquiry yet. <a href="#/">Ask a research question</a> to start the agents.</span></p>
+          <figure class="constellation reveal" id="constellation"></figure>
 
-    <section class="section" id="log" aria-labelledby="log-title">
-      <div class="section-head">
-        <div>
-          <h2 id="log-title">Activity</h2>
-          <p>Everything the agents did, in order. Open a row to see the raw data an agent passed on.</p>
-        </div>
-      </div>
-      <ol class="log" id="log-list"><li class="empty">Nothing yet. Run an inquiry to see the agents at work.</li></ol>
-    </section>
+          <div class="viewbar reveal" role="group" aria-label="Show or hide panels">
+            <div class="chips" id="chips"></div>
+            <div class="view-actions">
+              <button type="button" id="expand-all">Expand all</button>
+              <button type="button" id="collapse-all">Collapse all</button>
+              <button type="button" id="show-all">Show all</button>
+            </div>
+          </div>
+
+          <div class="grid" id="grid">
+            <article class="panel" id="panel-activity" data-panel="activity" data-span="full">
+              <header class="panel-head">
+                <span class="idx">Log</span>
+                <h3>Activity</h3>
+                <div class="panel-ctl"></div>
+                <p class="role">Everything the agents did, in order. Open a row to see the data an agent passed on.</p>
+              </header>
+              <div class="panel-body">
+                <ol class="log" id="log-list"><li class="empty">Nothing yet. Run an inquiry to see the agents at work.</li></ol>
+              </div>
+            </article>
+          </div>
+        </section>
+
+        <!-- Screen 3: paper -->
+        <section data-screen="paper" id="screen-paper" aria-labelledby="paper-title" hidden>
+          <div class="screen-head reveal">
+            <h2 id="paper-title" tabindex="-1">Paper</h2>
+            <p>The finished draft. Check every claim against the cited sources before you use it.</p>
+          </div>
+          <p class="blank" id="paper-blank" data-glyph="write"><span>No paper yet. It appears here, written live, when the agents reach the last step. <a href="#/flow">Follow the flow</a></span></p>
+
+          <div class="paper-layout" id="paper-layout">
+            <article class="paper-sheet reveal">
+              <div class="toolbar">
+                <button type="button" id="copy-btn" disabled>Copy text</button>
+                <button type="button" id="txt-btn" disabled>Download .txt</button>
+                <button type="button" id="print-btn" disabled>Save as PDF</button>
+              </div>
+              <div class="paper" id="paper-text"></div>
+            </article>
+            <aside class="paper-meta reveal" aria-label="Run summary">
+              <div class="meta-block" id="paper-summary"></div>
+              <div class="meta-block">
+                <p class="side-label">References</p>
+                <ol class="refs" id="paper-refs"></ol>
+              </div>
+            </aside>
+          </div>
+        </section>
+      </main>
+    </div>
 
     <footer class="foot">
-      <span>ANVIKSHA</span>
+      <span><img src="logo.svg" alt="" width="16" height="16" /> ANVIKSHA</span>
       <span>Literature from arXiv. Reasoning on Groq.</span>
     </footer>
   </div>
