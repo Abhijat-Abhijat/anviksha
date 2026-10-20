@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>ANVIKSHA</title>
+  <meta name="description" content="Autonomous multi-agent research intelligence: discovers gaps, formulates hypotheses, verifies evidence and synthesizes papers." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Geist+Mono:wght@300;400;500&family=Newsreader:opsz,wght@6..72,400;6..72,600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="frame">
+    <header class="nav">
+      <a class="logo" href="#top">ANVIKSHA</a>
+      <nav class="links" aria-label="Sections">
+        <a href="#pipeline">Pipeline</a>
+        <a href="#paper">Paper</a>
+        <a href="#log">Activity</a>
+      </nav>
+      <p class="nav-now" id="nav-now" aria-hidden="true"></p>
+      <ol class="strip" id="strip" aria-hidden="true"></ol>
+      <p class="status" id="status" data-state="pending"><span class="dot"></span><span id="status-text">Connecting</span></p>
+    </header>
+
+    <section class="hero" id="top">
+      <canvas id="field" aria-hidden="true"></canvas>
+      <div class="hero-card">
+        <p class="tag" id="hero-tag">Agents standing by</p>
+        <p class="now" id="now" aria-live="polite"></p>
+        <h1>Autonomous research,<br />question to paper</h1>
+        <p class="lede">Anviksha retrieves literature, finds research gaps, formulates and stress-tests a hypothesis, designs the experiment and writes it up. Every step is inspectable, editable and can be rerun.</p>
+        <form id="run-form" autocomplete="off">
+          <label class="sr-only" for="topic">Research question</label>
+          <div class="field">
+            <input id="topic" type="text" minlength="3" maxlength="200" required
+                   placeholder="Enter a research question" />
+            <button id="run-btn" type="submit">Run inquiry</button>
+          </div>
+          <input id="access-key" class="key" type="password" placeholder="Access key" aria-label="Access key" hidden />
+          <div class="examples">
+            <button type="button" class="example">Graph neural networks for drug discovery</button>
+            <button type="button" class="example">Federated learning for medical imaging</button>
+            <button type="button" class="example">Efficient transformers for low-resource NLP</button>
+          </div>
+          <p id="alert" class="alert" role="alert" hidden></p>
+        </form>
+      </div>
+    </section>
+
+    <section class="section" id="pipeline" aria-labelledby="pipeline-title">
+      <div class="section-head">
+        <div>
+          <h2 id="pipeline-title">Pipeline</h2>
+          <p>Each agent writes into its own cell. Edit the gaps or the hypothesis, then rerun any agent: it and every step after it run again.</p>
+        </div>
+        <dl class="readout">
+          <div><dt>Elapsed</dt><dd id="r-elapsed">0:00</dd></div>
+          <div><dt>Attempt</dt><dd id="r-attempt">–</dd></div>
+          <div><dt>Confidence</dt><dd id="r-confidence">–</dd></div>
+          <div><dt>Sources</dt><dd id="r-sources">–</dd></div>
+        </dl>
+      </div>
+      <ol class="cells" id="cells"></ol>
+    </section>
+
+    <section class="section" id="paper" aria-labelledby="paper-title">
+      <div class="section-head">
+        <div>
+          <h2 id="paper-title">Paper</h2>
+          <p>Draft written by the writer agent. Check every claim against the cited sources before you use it.</p>
+        </div>
+        <div class="toolbar">
+          <button type="button" id="copy-btn" disabled>Copy text</button>
+          <button type="button" id="txt-btn" disabled>Download .txt</button>
+          <button type="button" id="print-btn" disabled>Save as PDF</button>
+        </div>
+      </div>
+      <article class="paper" id="paper-text"><p class="empty">The paper appears here when the writer agent finishes.</p></article>
+    </section>
+
+    <section class="section" id="log" aria-labelledby="log-title">
+      <div class="section-head">
+        <div>
+          <h2 id="log-title">Activity</h2>
+          <p>Everything the agents did, in order. Open a row to see the raw data an agent passed on.</p>
+        </div>
+      </div>
+      <ol class="log" id="log-list"><li class="empty">Nothing yet. Run an inquiry to see the agents at work.</li></ol>
+    </section>
+
+    <footer class="foot">
+      <span>ANVIKSHA</span>
+      <span>Literature from arXiv. Reasoning on Groq.</span>
+    </footer>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
