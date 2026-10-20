@@ -6,6 +6,7 @@ class SummarizerAgent(LLMAgent):
     title = "Summarize"
     description = "Reads each paper and condenses it to its method, data and contribution."
     outputs = ("summaries",)
+    tier = "fast"
 
     def run(self, state):
         papers = state.get("papers", [])

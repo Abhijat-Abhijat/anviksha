@@ -15,7 +15,7 @@ To try the UI, set `GROQ_API_KEY` and run `uvicorn app.server:app --reload`.
 
 ## Architecture in one minute
 
-- **Agents** (`app/agents/`) are small classes, one per file. Each subclasses `Agent` (or `LLMAgent` if it calls a model), declares `name`, `title`, `description` and `outputs`, and implements `run(state) -> dict`, returning only the state keys it changes.
+- **Agents** (`app/agents/`) are small classes, one per file. Each subclasses `Agent` (or `LLMAgent` if it calls a model), declares `name`, `title`, `description`, `outputs` and (for LLM agents) a model `tier` (`fast`, `reasoning` or `writing`), and implements `run(state) -> dict`, returning only the state keys it changes.
 - **Dependencies are injected.** Agents receive an `LLM` (protocol in `app/llm.py`) or a `PaperSource` (protocol in `app/sources/__init__.py`) through their constructor. They never import a vendor SDK. This is what lets the tests use a fake model.
 - **The registry** (`app/agents/__init__.py`, `default_pipeline`) lists agents in pipeline order. `app/graph.py` wires them into a LangGraph state machine automatically. An agent that also implements `Router` chooses its own next step (see `GateAgent`).
 - **Prompts** live in `app/prompts/<name>.md` and use `$placeholders`. Agents render them with `self.generate("<name>", ...)`, which also streams tokens to the UI.
@@ -43,6 +43,7 @@ To try the UI, set `GROQ_API_KEY` and run `uvicorn app.server:app --reload`.
        title = "Novelty"
        description = "Looks for earlier work that already covers the idea."
        outputs = ("novelty_notes",)
+       tier = "reasoning"   # picks the model in Auto mode
 
        def run(self, state):
            self.say("Checking whether this idea has been tried before")  # plain words, shown live
@@ -52,7 +53,7 @@ To try the UI, set `GROQ_API_KEY` and run `uvicorn app.server:app --reload`.
    ```
 
 3. Declare the new key in `ResearchState` (`app/state.py`): `novelty_notes: str`.
-4. Insert `NoveltyAgent(llm)` into `default_pipeline` at the position where it should run.
+4. Insert `make(NoveltyAgent)` into `default_pipeline` at the position where it should run.
 5. Add a test in `tests/` using the fake LLM.
 
 The UI shows the new agent's output as JSON by default. For a custom view, add a renderer to `VIEWS` in `frontend/app.js` keyed by the agent's `name`.

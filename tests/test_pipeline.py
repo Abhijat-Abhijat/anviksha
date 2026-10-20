@@ -36,7 +36,7 @@ class FakeLLM:
 
 
 def run(llm, entry=None, seed=None):
-    graph = build_graph(default_pipeline(llm, FakeSource()), entry)
+    graph = build_graph(default_pipeline(lambda tier: llm, FakeSource()), entry)
     events, state = [], {}
     for mode, chunk in graph.stream(seed or {"topic": "test", "messages": []}, stream_mode=["updates", "custom"]):
         if mode == "custom":

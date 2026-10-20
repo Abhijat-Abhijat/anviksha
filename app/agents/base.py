@@ -29,6 +29,7 @@ class Agent(ABC):
     title: ClassVar[str]                    # short UI label, e.g. "Critique"
     description: ClassVar[str]              # one plain sentence for the UI
     outputs: ClassVar[tuple[str, ...]] = ()  # state keys this agent writes (cleared on rerun)
+    tier: ClassVar[str | None] = None        # model tier for LLM agents: "fast" | "reasoning" | "writing"
 
     @abstractmethod
     def run(self, state: dict) -> dict:
@@ -52,10 +53,12 @@ class Agent(ABC):
 
     def describe(self) -> dict:
         return {"name": self.name, "title": self.title, "description": self.description,
-                "outputs": list(self.outputs)}
+                "outputs": list(self.outputs), "tier": self.tier}
 
 
 class LLMAgent(Agent, ABC):
+    tier = "reasoning"
+
     def __init__(self, llm: LLM):
         self.llm = llm
 

@@ -12,21 +12,27 @@ from app.agents.retrieval import RetrievalAgent
 from app.agents.summarizer import SummarizerAgent
 from app.agents.verifier import VerifierAgent
 from app.agents.writer import WriterAgent
+from collections.abc import Callable
+
 from app.llm import LLM
 from app.sources import PaperSource
 
 __all__ = ["Agent", "LLMAgent", "Router", "default_pipeline"]
 
 
-def default_pipeline(llm: LLM, source: PaperSource) -> list[Agent]:
+def default_pipeline(llm_for: Callable[[str], LLM], source: PaperSource) -> list[Agent]:
+    """`llm_for(tier)` returns the model for a tier, so each agent gets the model suited to its task."""
+    def make(cls: type[LLMAgent]) -> LLMAgent:
+        return cls(llm_for(cls.tier))
+
     return [
         RetrievalAgent(source),
-        SummarizerAgent(llm),
-        GapFinderAgent(llm),
-        HypothesisAgent(llm),
-        CriticAgent(llm),
-        VerifierAgent(llm),
+        make(SummarizerAgent),
+        make(GapFinderAgent),
+        make(HypothesisAgent),
+        make(CriticAgent),
+        make(VerifierAgent),
         GateAgent(retry=HypothesisAgent.name, proceed=ExperimentAgent.name),
-        ExperimentAgent(llm),
-        WriterAgent(llm),
+        make(ExperimentAgent),
+        make(WriterAgent),
     ]

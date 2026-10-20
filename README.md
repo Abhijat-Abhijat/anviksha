@@ -30,6 +30,8 @@ retrieve → summarize → find_gaps → propose → critique → verify → dec
 | Experiment | Designs dataset, metrics, baselines, procedure and compute |
 | Paper | Writes the paper, citing only the retrieved sources |
 
+The model menu offers **Auto** (each step uses the model suited to its task: a fast model for summarizing and checking, a large one for reasoning and writing) or any single Groq model for every step. The list comes live from Groq, so retired models disappear by themselves.
+
 In the UI you can edit the gaps or the hypothesis and press **Rerun from here** on any agent: that agent and everything after it run again, using your edits.
 
 ## Run locally
@@ -54,7 +56,10 @@ Open <http://localhost:8000>.
 | Variable | Required | Default | Purpose |
 | --- | --- | --- | --- |
 | `GROQ_API_KEY` | yes | | Groq API key |
-| `GROQ_MODEL` | no | `llama-3.3-70b-versatile` | Any Groq chat model id |
+| `GROQ_MODEL` | no | `openai/gpt-oss-120b` | Fallback model, used when a tier model below is no longer offered by Groq |
+| `ANVIKSHA_MODEL_FAST` | no | `openai/gpt-oss-20b` | Auto mode: short, repetitive steps (Summarize, Verify) |
+| `ANVIKSHA_MODEL_REASONING` | no | `openai/gpt-oss-120b` | Auto mode: judgement steps (Gaps, Hypothesize, Critique, Experiment) |
+| `ANVIKSHA_MODEL_WRITING` | no | `openai/gpt-oss-120b` | Auto mode: the final paper |
 | `ANVIKSHA_ACCESS_KEY` | no | empty (open) | If set, the UI asks for this key before running. Use it on public deployments so strangers cannot spend your quota |
 | `ANVIKSHA_PAPERS` | no | `5` | Papers retrieved per run |
 | `ANVIKSHA_MAX_ATTEMPTS` | no | `3` | Hypothesis attempts before moving on |
@@ -64,7 +69,7 @@ See [.env.example](.env.example).
 
 ### Free-tier limits
 
-A full run makes roughly 12 to 20 model calls and uses about 15k tokens. Groq's free tier limits tokens per minute, so a run can pause briefly while the client waits and retries; this is automatic. If you hit limits often, set `GROQ_MODEL=llama-3.1-8b-instant` (higher limits, lower quality) or lower `ANVIKSHA_PAPERS`. Check your account's current limits at <https://console.groq.com/settings/limits>.
+A full run makes roughly 12 to 20 model calls and uses about 15k tokens. Groq's free tier limits tokens per minute, so a run can pause briefly while the client waits and retries; this is automatic. If you hit limits often, set `GROQ_MODEL=openai/gpt-oss-20b` (higher limits, lower quality) or lower `ANVIKSHA_PAPERS`. Check your account's current limits at <https://console.groq.com/settings/limits>.
 
 ## Deploy (GitHub + Render, free)
 
@@ -84,10 +89,11 @@ Any host that runs a Python web process works the same way: install `requirement
 | Method | Path | Description |
 | --- | --- | --- |
 | `GET` | `/api/health` | Status, model, whether an access key is required |
+| `GET` | `/api/models` | Models this key can use, and the Auto mapping per tier |
 | `GET` | `/api/agents` | Pipeline order and agent metadata (the UI builds itself from this) |
 | `POST` | `/api/run` | Runs the pipeline and streams newline-delimited JSON events |
 
-`POST /api/run` body: `{"topic": "...", "start": "retrieve", "state": {}}`. Set `start` to any agent name and pass the previous `state` to rerun from that agent. Send `X-Access-Key` if `ANVIKSHA_ACCESS_KEY` is set.
+`POST /api/run` body: `{"topic": "...", "start": "retrieve", "state": {}, "model": "auto"}`. Set `start` to any agent name and pass the previous `state` to rerun from that agent. Send `X-Access-Key` if `ANVIKSHA_ACCESS_KEY` is set.
 
 Stream events, one JSON object per line:
 

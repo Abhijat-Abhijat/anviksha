@@ -8,6 +8,7 @@ class VerifierAgent(LLMAgent):
     title = "Verify"
     description = "Checks the idea is backed by the papers rather than made up."
     outputs = ("hallucination_risk",)
+    tier = "fast"
 
     def run(self, state):
         self.say("Checking the idea is backed by the papers, not made up")

@@ -15,8 +15,11 @@ const live = {};           // node -> { say, text } while running
 let controller = null;
 let timer = null;
 let lastTick = 0;
+let modelInfo = { models: [], tiers: {} };
+let runChoice = null;      // model choice of the run in progress
 
 const KEY_STORE = "anviksha.key";
+const MODEL_STORE = "anviksha.model";
 const $ = (id) => document.getElementById(id);
 const fmt = (v) => (v == null ? "–" : Number(v).toFixed(2));
 
@@ -148,9 +151,18 @@ function buildCells() {
   });
 }
 
+// Model a step uses: its tier's model in Auto mode, otherwise the forced model.
+function modelFor(key, choice = runChoice || $("model").value) {
+  const tier = byName[key]?.tier;
+  if (!tier) return "";
+  return (choice === "auto" ? modelInfo.tiers[tier] : choice) || "";
+}
+
 function statusText(key) {
   const t = took[key] != null ? ` in ${took[key].toFixed(1)}s` : "";
-  return { idle: "Waiting", active: "Working", done: `Done${t}`, retry: `Sent back${t}` }[phase[key]];
+  const text = { idle: "Waiting", active: "Working", done: `Done${t}`, retry: `Sent back${t}` }[phase[key]];
+  const model = modelFor(key).replace(/^[^/]+\//, "");
+  return model ? `${text}, ${model}` : text;
 }
 
 function canRerun(i) {
@@ -271,6 +283,7 @@ function setRunning(on) {
   $("run-btn").textContent = on ? "Stop" : "Run inquiry";
   $("run-btn").toggleAttribute("data-running", on);
   $("topic").disabled = on;
+  $("model").disabled = on;
   document.querySelectorAll(".example").forEach((b) => (b.disabled = on));
   clearInterval(timer);
   if (on) {
@@ -312,6 +325,7 @@ async function run(start, topic = state.topic) {
   showAlert("");
 
   const { messages, ...seed } = state;
+  runChoice = $("model").value;
   controller = new AbortController();
   lastTick = performance.now();
   setRunning(true);
@@ -323,7 +337,7 @@ async function run(start, topic = state.topic) {
     if (key) headers["X-Access-Key"] = key;
     const res = await fetch("/api/run", {
       method: "POST", headers, signal: controller.signal,
-      body: JSON.stringify({ topic: state.topic, start, state: seed }),
+      body: JSON.stringify({ topic: state.topic, start, state: seed, model: runChoice }),
     });
     if (!res.ok) throw new Error(await errorText(res));
 
@@ -355,6 +369,7 @@ async function run(start, topic = state.topic) {
     ORDER.forEach((k) => { if (phase[k] === "active") phase[k] = "idle"; });
   } finally {
     controller = null;
+    runChoice = null;
     Object.keys(live).forEach((k) => delete live[k]);
     setRunning(false);
   }
@@ -413,12 +428,29 @@ async function checkHealth() {
     const h = await res.json();
     $("access-key").hidden = !h.key_required;
     if (!h.groq_configured) setStatus("warn", "GROQ_API_KEY missing");
-    else setStatus("ok", h.model);
-    if (!ORDER.length) await loadAgents();
+    else setStatus("ok", "Groq online");
+    if (!ORDER.length) await Promise.all([loadModels(), loadAgents()]);
   } catch {
     setStatus("down", "Offline");
   }
 }
+
+async function loadModels() {
+  const res = await fetch("/api/models");
+  modelInfo = await res.json();
+  const select = $("model");
+  select.replaceChildren(
+    el("option", { value: "auto", textContent: "Auto: best model for each step" }),
+    ...modelInfo.models.map((id) => el("option", { value: id, textContent: `${id} for every step` })));
+  let saved = "";
+  try { saved = localStorage.getItem(MODEL_STORE) || ""; } catch { /* storage blocked */ }
+  select.value = [...select.options].some((o) => o.value === saved) ? saved : "auto";
+}
+
+$("model").addEventListener("change", () => {
+  try { localStorage.setItem(MODEL_STORE, $("model").value); } catch { /* storage blocked */ }
+  if (ORDER.length) render();
+});
 
 async function loadAgents() {
   const res = await fetch("/api/agents");

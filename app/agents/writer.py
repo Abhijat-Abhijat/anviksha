@@ -6,6 +6,7 @@ class WriterAgent(LLMAgent):
     title = "Paper"
     description = "Writes everything up as a paper, citing only the papers found."
     outputs = ("final_paper",)
+    tier = "writing"
 
     def run(self, state):
         self.say("Writing the paper")
